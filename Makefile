@@ -1,16 +1,20 @@
 # SDA-DSC-214 workshop helpers.  Usage: make <target>
 PY  := $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
 DBT := $(if $(wildcard .venv/bin/dbt),$(CURDIR)/.venv/bin/dbt,dbt)
+SEED ?= 42
+ROWS ?= 100
+ERROR_RATE ?= 0.1
 export PYTHONPATH := $(CURDIR)/src
 export MASAR_HOME := $(CURDIR)
 
 .PHONY: help setup doctor data clean-data clean-lakehouse test kafka-up kafka-down kafka-topic \
-        register dbt-deps dbt-debug pipeline
+        register dbt-deps dbt-debug pipeline user-sign-ins
 
 help:
 	@echo "make setup           create .venv and install pinned packages"
 	@echo "make doctor          check Java, Python and every package"
 	@echo "make data            generate the Masar dataset (seeded)"
+	@echo "make user-sign-ins   append ROWS new sign-ins, land, and profile (SEED=42 ROWS=100 ERROR_RATE=0.1)"
 	@echo "make register        register bronze Delta tables so dbt can read them (Day 2)"
 	@echo "make dbt-deps|dbt-debug   dbt helpers (Day 2)"
 	@echo "make kafka-up|kafka-topic|kafka-down   single-broker Kafka (Day 3)"
@@ -29,6 +33,11 @@ doctor:
 
 data:
 	$(PY) scripts/make_data.py --seed 42
+
+user-sign-ins:
+	$(PY) scripts/user_sign_ins.py generate --seed "$(SEED)" --rows "$(ROWS)" --error-rate "$(ERROR_RATE)"
+	$(PY) scripts/user_sign_ins.py land
+	$(PY) scripts/user_sign_ins.py profile
 
 clean-data:
 	rm -rf data/raw/*.csv data/raw/gps data/fixtures/*.parquet data/fixtures/*.csv data/fixtures/*.json

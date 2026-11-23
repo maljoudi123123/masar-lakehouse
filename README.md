@@ -10,6 +10,14 @@ This repo is the **starting point (before Day 1)**. Fork it, clone your fork, an
 
 Requirements: Python 3.10-3.12, Java 17, git. Docker is needed from Day 3.
 
+On macOS with Homebrew, install Java 17 once with `brew install openjdk@17`.
+Select it in the shell where you run the workshop commands:
+
+```bash
+export JAVA_HOME="$(brew --prefix openjdk@17)/libexec/openjdk.jdk/Contents/Home"
+export PATH="$JAVA_HOME/bin:$PATH"
+```
+
 ```bash
 git clone <your-fork-url> masar-lakehouse && cd masar-lakehouse
 make setup                      # creates .venv and installs pinned packages
