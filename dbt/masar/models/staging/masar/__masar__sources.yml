@@ -6,6 +6,6 @@ sources:
       - name: trips
         loaded_at_field: _ingested_at # load it by this field
         freshness:
-          warn_after:  {count: 6,  period: hour} # fire a warning if it is older than 6 hours
-          error_after: {count: 24, period: hour} # fire an error if it is older than 24 hours
+          warn_after:  {count: 1,  period: hour} # fire a warning if it is older than 6 hours
+          error_after: {count: 3, period: hour} # fire an error if it is older than 24 hours
       - name: drivers

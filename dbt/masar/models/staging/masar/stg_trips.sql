@@ -1,5 +1,9 @@
 with source as (
-select * from {{ source('bronze', 'trips') }}
+select
+    *,
+    -- bronze holds each trip once per load; keep only the latest load
+    row_number() over (partition by trip_id order by _ingested_at desc) as _rn
+from {{ source('bronze', 'trips') }}
 )
 select
 cast(trip_id as string)           as trip_id,
@@ -17,3 +21,4 @@ dropoff_geohash,
 _ingested_at
 from source
 where trip_id is not null
+  and _rn = 1

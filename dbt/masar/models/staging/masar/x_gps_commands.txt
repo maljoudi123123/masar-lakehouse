@@ -1,0 +1,86 @@
+# Start in masar-lakehouse with the project venv active.
+# Copy one numbered block at a time.
+
+# 1. Inspect the bronze schema and three example pings.
+export MASAR_HOME="$PWD"
+export PYTHONPATH="$MASAR_HOME/src${PYTHONPATH:+:$PYTHONPATH}"
+
+python - <<'PY'
+from masar.spark import get_spark
+
+s = get_spark("inspect-gps")
+try:
+    gps = s.table("bronze.gps_pings")
+    gps.printSchema()
+    gps.show(3, truncate=False)
+finally:
+    s.stop()
+PY
+
+# 2. Define the source and model, then run only the GPS staging model.
+cd "$MASAR_HOME/dbt/masar"
+d=models/staging/masar
+
+cat > "$d/x_sources.yml" <<'YAML'
+version: 2
+sources:
+  - name: x_bronze
+    schema: bronze
+    tables:
+      - name: gps_pings
+YAML
+
+cat > "$d/x_stg_gps_pings.sql" <<'SQL'
+with pings as (
+    select
+        trip_id,
+        driver_id,
+        city,
+        -- Parse the raw event time for chronological queries. Invalid text yields null.
+        try_cast(event_ts as timestamp) as event_at,
+        lat as latitude,
+        lon as longitude,
+        _source_file,
+        _ingested_at
+    from {{ source('x_bronze', 'gps_pings') }}
+)
+select
+    trip_id,
+    driver_id,
+    city,
+    event_at,
+    latitude,
+    longitude,
+    _source_file,
+    min(_ingested_at) as _ingested_at
+from pings
+where trip_id is not null
+  and event_at is not null
+  and latitude between -90 and 90
+  and longitude between -180 and 180
+-- Keep the first ingestion of each matching ping from the same file.
+group by trip_id, driver_id, city, event_at, latitude, longitude, _source_file
+SQL
+
+dbt run --project-dir "$MASAR_HOME/dbt/masar" --profiles-dir "$MASAR_HOME/dbt/masar" --select x_stg_gps_pings
+
+# 3. Once dbt finishes successfully, verify the count and drop the view.
+cd "$MASAR_HOME"
+python - <<'PY'
+from masar.spark import get_spark
+
+s = get_spark("check-gps-staging")
+try:
+    n = s.table("default.x_stg_gps_pings").count()
+    print(f"Staged GPS pings: {n:,}")
+    assert n == 120_000, f"Expected 120,000 rows, got {n:,}"
+finally:
+    try:
+        s.sql("DROP VIEW IF EXISTS default.x_stg_gps_pings")
+    finally:
+        s.stop()
+PY
+
+# 4. Remove the two exercise files. This leaves your command sheet available.
+d="$MASAR_HOME/dbt/masar/models/staging/masar"
+rm -f "$d/x_stg_gps_pings.sql" "$d/x_sources.yml"
