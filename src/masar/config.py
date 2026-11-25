@@ -13,5 +13,5 @@ QUARANTINE = str(LAKEHOUSE / "quarantine" / "trips")
 CHECKPOINTS = str(LAKEHOUSE / "_checkpoints")
 
 CITIES = ["Riyadh", "Jeddah", "Dammam", "Mecca", "Medina"]
-KAFKA_BOOTSTRAP = "localhost:9092"
+KAFKA_BOOTSTRAP = "127.0.0.1:9092"  # not localhost: resolves to IPv6 ::1 first, which Colima drops
 PING_TOPIC = "masar.gps.pings"
