@@ -17,6 +17,52 @@ never pushed, send this file and the output of `python -m masar.proof` instead.
 6. Pipeline (`make pipeline`): `masar.pipeline` runs every step above in order, each in its own process, and stops at the first failure; it exits 0 from a clean lakehouse in about 2 minutes and is safe to re-run.
 7. Proof (counts + time travel): `masar.proof --erase` erases one rider (right to erasure), prints the row count of every table per layer, and compares silver version 0 with the latest version.
 
+## How the pipeline flows
+`make pipeline` runs `src/masar/pipeline.py`, which runs these steps in order, each in its own
+process, and stops at the first failure. Every step reads the layer before it.
+
+```
+data/raw/  (made by `make data`, seed 42)
+ ├ trips_2026-06-01.csv   ┐
+ ├ drivers.csv            ├─▶ ① ingest/land_bronze.py ──▶ lakehouse/bronze/{trips, drivers, gps_pings}
+ └ gps/sample.ndjson      ┘                                  │
+                                                             ▼
+                              ② register.py ──▶ names them bronze.trips … in the metastore
+                                                             │
+                                                             ▼
+          ③ dbt build: stg_trips + stg_drivers ─▶ silver_trips.sql ──▶ lakehouse/silver/trips
+                                                             │
+                              ④ quality/check_silver.py (gate: stop if bad)
+                                                             │
+                              ⑤ transform/build_gold.py ──▶ gold/zone_hourly_demand
+                                                         └─▶ gold/trip_features
+                                                             │
+              ⑥ serve/bi_view.py ◀── silver ──▶ gold/bi_trips_safe   (no PII)
+              ⑦ serve/training_join.py ◀── trip_features + silver ──▶ gold/training_set (no leakage)
+                                                             │
+                              ⑧ proof.py --counts-only ──▶ prints counts per layer
+```
+
+| # | File | Reads | Writes |
+|---|---|---|---|
+| 1 | `ingest/land_bronze.py` | `data/raw/*` | `lakehouse/bronze/*` (raw, plus `_ingested_at` and `_source_file`) |
+| 2 | `register.py` | bronze folders | table names in `lakehouse/_metastore` |
+| 3 | `dbt/masar/models/...` | `bronze.trips`, `bronze.drivers` | `lakehouse/silver/trips` (clean, one row per trip) |
+| 4 | `quality/check_silver.py` | silver | nothing; it fails the run if the checks fail |
+| 5 | `transform/build_gold.py` | silver | `gold/zone_hourly_demand`, `gold/trip_features` |
+| 6 | `serve/bi_view.py` | silver | `gold/bi_trips_safe` |
+| 7 | `serve/training_join.py` | `gold/trip_features` + silver | `gold/training_set` |
+| 8 | `proof.py` | every table above | nothing (prints) |
+
+Run by hand after the pipeline:
+- `python -m masar.delta.capstone_controls` (step 3): adds the `positive_fare` constraint and the
+  `promo_code` column to silver.
+- `python -m masar.proof --erase` (step 7): deletes the rider in `data/fixtures/erasure_request.json`
+  from silver, then prints the counts and the time-travel check.
+
+In one line: raw files → bronze (as-is) → silver (cleaned and tested) → gold (aggregated for
+questions) → consumer tables (safe for BI and ML).
+
 ## Counts per layer
 ```
 layer   table                     rows   expected
