@@ -61,3 +61,11 @@ def optimize_and_vacuum() -> None:
         dt.optimize().executeCompaction()
         dt.vacuum()
         print(f"  maintained {name}")
+
+
+# CAPSTONE: added. The Day 4 file had no entry point (the Day 4 pipeline imported the
+# functions). The capstone pipeline runs each step as its own process, so this builds
+# both marts: zone_hourly_demand (step 4) and trip_features (needed by the training set).
+if __name__ == "__main__":
+    build_zone_hourly_demand()
+    build_trip_features()

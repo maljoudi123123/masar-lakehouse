@@ -26,9 +26,14 @@ def build_bi_safe_view() -> None:
         safe = safe.withColumn(col.replace("_geohash", "_area"), F.substring(col, 1, n))
     safe = safe.select("trip_id", "city", "rider_pseudonym", "driver_pseudonym",
                        "dropoff_area", "fare_sar", "distance_km", "duration_min", "started_at")
+    # CAPSTONE: added. Step 5 checkpoint "No PII columns": check the OUTPUT too, not only the
+    # plan above, so a later edit to the select cannot leak a raw identifier into BI.
+    leaked = set(safe.columns) & set(PII_COLUMNS["trips"])
+    assert not leaked, f"PII columns in the BI table: {sorted(leaked)}"
     safe.write.format("delta").mode("overwrite").save(f"{GOLD}/bi_trips_safe")
     print(f"bi_trips_safe rows: {safe.count():,}")
     print("columns:", safe.columns)
+    print("PII check passed: no raw identifier or precise location columns")  # CAPSTONE: added
 
 
 if __name__ == "__main__":

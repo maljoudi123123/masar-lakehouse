@@ -1,6 +1,11 @@
 {{ config(materialized='incremental', incremental_strategy='merge',
 unique_key='trip_id', file_format='delta', alias='trips',
-on_schema_change='append_new_columns') }}
+on_schema_change='append_new_columns',
+pre_hook="set spark.databricks.delta.schema.autoMerge.enabled = true") }}
+{#- CAPSTONE: added pre_hook. Step 3 adds a column to silver.trips (ALTER TABLE ... ADD COLUMNS).
+    Without autoMerge the next incremental MERGE (UPDATE SET * / INSERT *) fails with
+    DELTA_MERGE_UNRESOLVED_EXPRESSION, because this query does not produce that column.
+    With it, Delta leaves the extra column unchanged on update and NULL on insert. -#}
 
 with trips as (
     select * from {{ ref('stg_trips') }}
